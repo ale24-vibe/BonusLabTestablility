@@ -7,6 +7,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -70,6 +71,39 @@ class SAP_BasedInvoiceSenderTest {
         verify(filter, times(1)).lowValueInvoices();
 
         // No interactions with sap beyond the expectation above
+        verifyNoMoreInteractions(sap);
+    }
+
+    @Test
+    void testThrowExceptionWhenBadInvoice() {
+        // Arrange:
+        // Create two invoices. We'll simulate a failure when sending the first, and success for the second.
+        Invoice bad = new Invoice("bad-cust", 10);
+        Invoice good = new Invoice("good-cust", 20);
+        List<Invoice> invoices = Arrays.asList(bad, good);
+
+        // Stub filter to return the controlled list.
+        when(filter.lowValueInvoices()).thenReturn(invoices);
+
+        // Stub sap.send(...) to throw for the "bad" invoice only.
+        // doThrow lets us stub a void method to throw an exception for a specific argument.
+        doThrow(new FailToSendSAPInvoiceException("simulated failure"))
+                .when(sap).send(bad);
+
+        // Act: call the method under test. The sender should catch the exception, continue, and return failed list.
+        List<Invoice> failed = sender.sendLowValuedInvoices();
+
+        // Assert:
+        // - The failed list should contain exactly the bad invoice (the one that caused an exception).
+        assertThat(failed).containsExactly(bad);
+
+        // - Verify sap.send was called for both invoices (ensures exception did not stop processing).
+        verify(sap, times(1)).send(bad);
+        verify(sap, times(1)).send(good);
+
+        // - Verify filter was queried exactly once.
+        verify(filter, times(1)).lowValueInvoices();
+
         verifyNoMoreInteractions(sap);
     }
 }
