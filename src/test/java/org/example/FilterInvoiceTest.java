@@ -2,6 +2,7 @@ package org.example;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,5 +47,43 @@ class FilterInvoiceTest {
                 .isNotNull()
                 .hasSize(1)
                 .allMatch(i -> i.getValue() < 100);
+    }
+
+    @Test
+    void filterInvoiceStubbedTest() {
+        // Unit test with the DAO stubbed to avoid any database interaction.
+        //
+        // How it works:
+        // 1) Create a FilterInvoice instance (it will create its real DAO internally).
+        // 2) Replace the package-private 'dao' field with a lightweight stub (anonymous subclass)
+        //    that overrides all() to return a controlled list of Invoice objects.
+        // 3) Call lowValueInvoices() and assert the filtering logic uses only the provided data.
+        //
+        // This isolates FilterInvoice.lowValueInvoices() from the real Database and QueryInvoicesDAO,
+        // making the test fast, deterministic, and suitable as a unit test.
+        FilterInvoice filter = new FilterInvoice();
+
+        QueryInvoicesDAO stubDao = new QueryInvoicesDAO(null) {
+            @Override
+            public List<Invoice> all() {
+                // Controlled dataset: one invoice below threshold and one above
+                return Arrays.asList(
+                        new Invoice("customer-low", 50),
+                        new Invoice("customer-high", 150)
+                );
+            }
+        };
+
+        // Inject the stub DAO to replace the real DAO created in the constructor.
+        filter.dao = stubDao;
+
+        // Execute the method under test
+        List<Invoice> low = filter.lowValueInvoices();
+
+        // Verify the filtering behaviour with the stubbed input
+        assertThat(low)
+                .hasSize(1)
+                .extracting(Invoice::getValue)
+                .containsExactly(50);
     }
 }
